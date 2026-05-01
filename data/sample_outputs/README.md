@@ -15,3 +15,4 @@ Included examples:
 - `eod_integrity_report_sample.md`
 - `ml_anomaly_scores_sample.csv`
 - `ml_anomaly_report_sample.md`
+- `integrity_dashboard_sample.html`

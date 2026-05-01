@@ -42,6 +42,7 @@ EXPECTED_ARTIFACTS = [
     "eod_integrity_report.md",
     "ml_anomaly_scores.csv",
     "ml_anomaly_report.md",
+    "integrity_dashboard.html",
 ]
 ML_ARTIFACTS = [
     "ml_anomaly_scores.csv",
@@ -468,6 +469,17 @@ def run_ml_anomaly_scoring(output_dir: Path, skip_ml: bool) -> bool:
 
 
 @task
+def generate_integrity_dashboard(output_dir: Path) -> None:
+    run_command(
+        build_python_module_command(
+            "src.reporting.generate_dashboard",
+            "--output-dir",
+            str(output_dir),
+        )
+    )
+
+
+@task
 def run_dbt_commands(skip_dbt: bool) -> bool:
     commands = build_dbt_commands(skip_dbt)
     for command in commands:
@@ -529,6 +541,7 @@ def pipeline_flow(config: PipelineConfig) -> Path:
     export_reporting_outputs(config.output_dir)
     generate_markdown_report(config.output_dir)
     ml_skipped = run_ml_anomaly_scoring(config.output_dir, config.skip_ml)
+    generate_integrity_dashboard(config.output_dir)
     dbt_skipped = run_dbt_commands(config.skip_dbt)
     source_files, artifacts, metrics, quality_gates = run_quality_gates(config)
     return write_pipeline_summary(

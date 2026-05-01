@@ -30,6 +30,7 @@ The current version implements a complete local batch pipeline:
 - adds a lightweight ML anomaly model as a secondary triage signal
 - mirrors the SQL model flow in dbt with tests
 - exports reporting-ready CSV outputs
+- generates a static HTML dashboard for portfolio review and operational handoff
 
 ## Architecture
 
@@ -42,6 +43,7 @@ Excel workbooks
   -> reporting.daily_reconciliation_summary / reporting.alert_feed
   -> reporting.anomaly_scorecard
   -> ML anomaly scores
+  -> HTML dashboard
   -> CSV outputs
 ```
 
@@ -82,6 +84,7 @@ Portfolio-safe examples are included in `data/sample_outputs/`:
 - `anomaly_scorecard_sample.csv`
 - `ml_anomaly_scores_sample.csv`
 - `ml_anomaly_report_sample.md`
+- `integrity_dashboard_sample.html`
 
 Full generated outputs are written locally to `data/processed/`:
 
@@ -94,6 +97,7 @@ Full generated outputs are written locally to `data/processed/`:
 - `eod_integrity_report.md`
 - `ml_anomaly_scores.csv`
 - `ml_anomaly_report.md`
+- `integrity_dashboard.html`
 - `pipeline_run_summary.json`
 
 `data/processed/` is ignored because those files are reproducible outputs.
@@ -106,7 +110,7 @@ For a quick end-to-end demo on Windows, run:
 powershell -ExecutionPolicy Bypass -File .\scripts\run_demo.ps1
 ```
 
-The demo script runs the Prefect-orchestrated pipeline. It generates a synthetic workbook, applies the SQL pipeline, loads the workbook, exports reporting CSVs, generates the Markdown reports, runs ML anomaly scoring, runs dbt checks, applies quality gates, and writes a run summary under `ci_artifacts/`, which is ignored by Git.
+The demo script runs the Prefect-orchestrated pipeline. It generates a synthetic workbook, applies the SQL pipeline, loads the workbook, exports reporting CSVs, generates the Markdown reports, runs ML anomaly scoring, builds the static HTML dashboard, runs dbt checks, applies quality gates, and writes a run summary under `ci_artifacts/`, which is ignored by Git.
 
 Create a virtual environment and install dependencies:
 
@@ -164,6 +168,12 @@ Generate the Markdown EOD report:
 
 ```powershell
 python -m src.reporting.generate_eod_report
+```
+
+Generate the static dashboard from exported reporting files:
+
+```powershell
+python -m src.reporting.generate_dashboard
 ```
 
 Run the orchestrated pipeline directly:
@@ -227,6 +237,21 @@ The model writes:
 
 This is intentionally a secondary triage signal, not a replacement for explainable data quality checks. The CSV keeps the rule-based anomaly score beside the ML score so reviewers can compare deterministic business logic with model-driven outlier detection.
 
+## Dashboard
+
+The pipeline writes `integrity_dashboard.html`, a static dashboard that can be opened directly in a browser.
+
+It summarizes:
+
+- source-day and bet-row volume
+- review days and high-risk days
+- rule-based anomaly priorities
+- ML outlier priorities
+- alert mix and quality issue mix
+- stake, payout, and net revenue totals
+
+The dashboard is intentionally static so it works in GitHub Actions artifacts, portfolio demos, and local review without running a web server.
+
 ## Orchestration
 
 The production-style workflow is implemented with Prefect in `src.orchestration.run_pipeline`.
@@ -239,8 +264,9 @@ The flow coordinates:
 - reporting exports
 - Markdown EOD report generation
 - ML anomaly scoring
+- static dashboard generation
 - dbt debug, parse, run, and test
-- quality gates for loaded rows, artifacts, anomaly rows, ML outliers, and demo alerts
+- quality gates for loaded rows, dashboard/artifacts, anomaly rows, ML outliers, and demo alerts
 - `pipeline_run_summary.json` output
 
 ## Verification
@@ -255,7 +281,7 @@ The GitHub Actions workflow also validates the project against a clean PostgreSQ
 
 - Python unit tests
 - the Prefect-orchestrated demo pipeline
-- quality gates for demo alerts, critical anomaly scoring, and ML outlier scoring
+- quality gates for demo alerts, dashboard generation, critical anomaly scoring, and ML outlier scoring
 - dbt debug, parse, run, and test inside the orchestrated flow
 
 ## Project Status
@@ -263,4 +289,4 @@ The GitHub Actions workflow also validates the project against a clean PostgreSQ
 Version 1 is now a complete local data integrity pipeline. The next valuable extensions would be:
 
 - add cloud storage ingestion with S3
-- add a lightweight dashboard over the reporting outputs
+- add stronger observability metadata such as run manifests and data lineage docs
