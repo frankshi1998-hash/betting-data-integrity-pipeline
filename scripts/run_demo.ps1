@@ -25,12 +25,6 @@ $Python = if (Test-Path ".\.venv\Scripts\python.exe") {
     "python"
 }
 
-$Dbt = if (Test-Path ".\.venv\Scripts\dbt.exe") {
-    ".\.venv\Scripts\dbt.exe"
-} else {
-    "dbt"
-}
-
 function Import-DotEnv {
     $envPath = Join-Path $ProjectRoot ".env"
     if (-not (Test-Path $envPath)) {
@@ -97,44 +91,25 @@ if (-not (Test-PostgresPort)) {
     throw "PostgreSQL is not reachable. Start Docker Desktop or run PostgreSQL locally, then retry."
 }
 
-$demoWorkbookPath = Join-Path $DemoRawDir "demo_bookmaker_bet_dump.xlsx"
-
-Invoke-Checked "Generate synthetic demo workbook" {
-    & $Python -m src.data_generation.create_demo_workbook --output-path $demoWorkbookPath
-}
-
 Invoke-Checked "Run Python unit tests" {
     & $Python -m pytest -q
 }
 
-Invoke-Checked "Apply SQL pipeline" {
-    & $Python -m src.setup.apply_sql_pipeline
+$pipelineArgs = @(
+    "-m", "src.orchestration.run_pipeline",
+    "--demo",
+    "--raw-dir", $DemoRawDir,
+    "--output-dir", $OutputDir,
+    "--replace-files",
+    "--require-demo-alerts"
+)
+
+if ($SkipDbt) {
+    $pipelineArgs += "--skip-dbt"
 }
 
-Invoke-Checked "Load synthetic workbook into raw schema" {
-    & $Python -m src.ingest.load_bookmaker_dump --raw-dir $DemoRawDir --replace-files
-}
-
-Invoke-Checked "Export reporting CSVs" {
-    & $Python -m src.reporting.export_reporting_views --output-dir $OutputDir
-}
-
-Invoke-Checked "Generate EOD integrity report" {
-    & $Python -m src.reporting.generate_eod_report --output-path (Join-Path $OutputDir "eod_integrity_report.md")
-}
-
-if (-not $SkipDbt) {
-    Invoke-Checked "dbt debug" {
-        & $Dbt debug --project-dir .\dbt_project --profiles-dir .\dbt_project\profiles
-    }
-
-    Invoke-Checked "dbt run" {
-        & $Dbt run --project-dir .\dbt_project --profiles-dir .\dbt_project\profiles
-    }
-
-    Invoke-Checked "dbt test" {
-        & $Dbt test --project-dir .\dbt_project --profiles-dir .\dbt_project\profiles
-    }
+Invoke-Checked "Run orchestrated demo pipeline" {
+    & $Python @pipelineArgs
 }
 
 Write-Host ""

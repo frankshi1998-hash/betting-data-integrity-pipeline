@@ -63,32 +63,14 @@ jobs:
       - name: Run Python unit tests
         run: python -m unittest discover -s tests -p "test_*.py"
 
-      - name: Generate demo workbook
-        run: python -m src.data_generation.create_demo_workbook --output-path ci_artifacts/raw/demo_bookmaker_bet_dump.xlsx
-
-      - name: Apply SQL pipeline
-        run: python -m src.setup.apply_sql_pipeline
-
-      - name: Load workbook data
-        run: python -m src.ingest.load_bookmaker_dump --raw-dir ci_artifacts/raw --replace-files
-
-      - name: Export reporting outputs
-        run: python -m src.reporting.export_reporting_views --output-dir ci_artifacts/processed
-
-      - name: Generate EOD integrity report
-        run: python -m src.reporting.generate_eod_report --output-path ci_artifacts/processed/eod_integrity_report.md
-
-      - name: dbt debug
-        run: dbt debug --project-dir ./dbt_project --profiles-dir ./dbt_project/profiles
-
-      - name: dbt parse
-        run: dbt parse --project-dir ./dbt_project --profiles-dir ./dbt_project/profiles
-
-      - name: dbt run
-        run: dbt run --project-dir ./dbt_project --profiles-dir ./dbt_project/profiles
-
-      - name: dbt test
-        run: dbt test --project-dir ./dbt_project --profiles-dir ./dbt_project/profiles
+      - name: Run orchestrated demo pipeline
+        run: >
+          python -m src.orchestration.run_pipeline
+          --demo
+          --raw-dir ci_artifacts/raw
+          --output-dir ci_artifacts/processed
+          --replace-files
+          --require-demo-alerts
 
       - name: Upload reporting artifacts
         uses: actions/upload-artifact@v7

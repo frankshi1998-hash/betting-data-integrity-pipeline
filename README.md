@@ -49,6 +49,7 @@ Excel workbooks
 - PostgreSQL
 - SQL
 - dbt
+- Prefect
 - Docker
 - pytest / unittest
 - GitHub Actions
@@ -86,6 +87,7 @@ Full generated outputs are written locally to `data/processed/`:
 - `alert_summary.csv`
 - `anomaly_scorecard.csv`
 - `eod_integrity_report.md`
+- `pipeline_run_summary.json`
 
 `data/processed/` is ignored because those files are reproducible outputs.
 
@@ -97,7 +99,7 @@ For a quick end-to-end demo on Windows, run:
 powershell -ExecutionPolicy Bypass -File .\scripts\run_demo.ps1
 ```
 
-The demo script generates a synthetic workbook, applies the SQL pipeline, loads the workbook, exports reporting CSVs, and runs dbt checks. By default it writes generated demo files under `ci_artifacts/`, which is ignored by Git.
+The demo script runs the Prefect-orchestrated pipeline. It generates a synthetic workbook, applies the SQL pipeline, loads the workbook, exports reporting CSVs, generates the Markdown report, runs dbt checks, applies quality gates, and writes a run summary under `ci_artifacts/`, which is ignored by Git.
 
 Create a virtual environment and install dependencies:
 
@@ -157,6 +159,12 @@ Generate the Markdown EOD report:
 python -m src.reporting.generate_eod_report
 ```
 
+Run the orchestrated pipeline directly:
+
+```powershell
+python -m src.orchestration.run_pipeline --demo --raw-dir ci_artifacts/orchestrated_raw --output-dir ci_artifacts/orchestrated_processed --replace-files --require-demo-alerts
+```
+
 ## dbt
 
 The dbt project mirrors the raw-to-reporting model flow.
@@ -199,6 +207,21 @@ The scorecard ranks each source file and reporting day from `0` to `100` using e
 
 Each row receives a `risk_band`, `primary_driver`, and `recommended_action`, which turns validation results into a practical operations queue.
 
+## Orchestration
+
+The production-style workflow is implemented with Prefect in `src.orchestration.run_pipeline`.
+
+The flow coordinates:
+
+- synthetic workbook generation
+- raw ingestion
+- SQL model application
+- reporting exports
+- Markdown EOD report generation
+- dbt debug, parse, run, and test
+- quality gates for loaded rows, artifacts, anomaly rows, and demo alerts
+- `pipeline_run_summary.json` output
+
 ## Verification
 
 Run Python tests:
@@ -210,21 +233,13 @@ python -m pytest -q
 The GitHub Actions workflow also validates the project against a clean PostgreSQL service by running:
 
 - Python unit tests
-- synthetic workbook generation
-- SQL pipeline application
-- demo workbook ingestion
-- reporting export generation
-- anomaly scorecard export
-- Markdown EOD integrity report generation
-- `dbt debug`
-- `dbt parse`
-- `dbt run`
-- `dbt test`
+- the Prefect-orchestrated demo pipeline
+- quality gates for demo alerts and critical anomaly scoring
+- dbt debug, parse, run, and test inside the orchestrated flow
 
 ## Project Status
 
 Version 1 is now a complete local data integrity pipeline. The next valuable extensions would be:
 
 - add a lightweight ML anomaly model alongside the explainable scorecard
-- add an orchestrator such as Prefect or Airflow
 - add cloud storage ingestion with S3
