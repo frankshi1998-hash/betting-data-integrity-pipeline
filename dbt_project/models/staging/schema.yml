@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: stg_bookmaker_bets
+    description: Typed staging model built from the raw bookmaker dump.
+    columns:
+      - name: ingestion_id
+        tests:
+          - not_null
+          - unique
+      - name: source_uuid
+        tests:
+          - not_null
+      - name: bet_placed_at
+        tests:
+          - not_null
+      - name: event_scheduled_at
+        description: May be null in dirty source rows; missing values are reported by the quality layer.

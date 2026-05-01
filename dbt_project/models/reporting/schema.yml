@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: rpt_daily_issue_summary
+    description: Daily issue counts by source file and issue type.
+  - name: rpt_daily_reconciliation_summary
+    description: End-of-day source-level reconciliation summary.
+    columns:
+      - name: source_file
+        tests:
+          - not_null
+      - name: report_date
+        tests:
+          - not_null
+  - name: rpt_daily_bookmaker_summary
+    description: Daily bookmaker-level stake, payout, and duplicate summary.
+  - name: rpt_source_day_alerts
+    description: Rule-based source-day alerts from reconciliation metrics.
+    columns:
+      - name: alert_id
+        tests:
+          - not_null
+          - unique
+  - name: rpt_bookmaker_day_alerts
+    description: Rule-based bookmaker-day alerts from reporting metrics.
+    columns:
+      - name: alert_id
+        tests:
+          - not_null
+          - unique
+  - name: rpt_alert_feed
+    description: Combined operational alert feed.
+    columns:
+      - name: alert_id
+        tests:
+          - not_null
+          - unique
+  - name: rpt_alert_summary
+    description: Alert count summary by day, scope, severity, and type.

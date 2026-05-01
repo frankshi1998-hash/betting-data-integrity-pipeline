@@ -1,0 +1,4 @@
+source_file,report_date,total_bet_rows,distinct_bet_key_count,duplicate_bet_key_group_count,duplicate_extra_row_count,named_customer_rows,cancelled_bet_rows,refunded_bet_rows,total_issue_rows,duplicate_bet_key_issue_rows,negative_stake_issue_rows,missing_event_timestamp_issue_rows,cancelled_with_payout_issue_rows,payout_without_stake_issue_rows,total_stake_amount,total_payout_amount,net_revenue_amount,payout_ratio,reconciliation_status
+sample_source_A.xlsx,2026-03-01,1039,1039,0,0,176,25,17,89,0,89,0,0,0,23303.32,19601.97,3701.35,0.8412,review
+sample_source_B.xlsx,2026-03-01,415,415,0,0,40,10,1,20,0,20,0,0,0,13074.95,13103.87,-28.92,1.0022,review
+sample_source_C.xlsx,2026-03-03,253,253,0,0,13,9,0,0,0,0,0,0,0,29088.50,3415.91,25672.59,0.1174,pass

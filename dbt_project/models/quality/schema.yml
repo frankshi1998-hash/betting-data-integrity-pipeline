@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: quality_bookmaker_bet_validation_issues
+    description: Row-level integrity issues identified from the bet fact model.
+    columns:
+      - name: bet_record_key
+        tests:
+          - not_null
+      - name: issue_type
+        tests:
+          - not_null
+  - name: quality_bookmaker_bet_validation_summary
+    description: Summary rollup of issue counts by issue type.
+    columns:
+      - name: issue_type
+        tests:
+          - not_null
+          - unique

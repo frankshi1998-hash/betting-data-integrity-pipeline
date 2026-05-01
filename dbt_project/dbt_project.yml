@@ -1,0 +1,31 @@
+name: xid_go_dbt
+version: "1.0.0"
+config-version: 2
+
+profile: xid_go
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+clean-targets:
+  - "target"
+  - "dbt_packages"
+  - "logs"
+
+models:
+  xid_go_dbt:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +materialized: view
+      +schema: dbt_stage
+    marts:
+      +materialized: view
+      +schema: dbt_core
+    quality:
+      +materialized: view
+      +schema: dbt_quality
+    reporting:
+      +materialized: view
+      +schema: dbt_reporting
