@@ -37,3 +37,22 @@ models:
           - unique
   - name: rpt_alert_summary
     description: Alert count summary by day, scope, severity, and type.
+  - name: rpt_anomaly_scorecard
+    description: Source-day anomaly scorecard that prioritizes reconciliation risk using explainable component scores.
+    columns:
+      - name: anomaly_id
+        tests:
+          - not_null
+          - unique
+      - name: source_file
+        tests:
+          - not_null
+      - name: report_date
+        tests:
+          - not_null
+      - name: risk_band
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['normal', 'low', 'medium', 'high', 'critical']

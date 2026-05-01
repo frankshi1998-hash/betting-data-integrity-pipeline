@@ -15,9 +15,11 @@ SQL_FILES = [
     PROJECT_ROOT / 'sql' / 'validation_checks' / '001_quality_views.sql',
     PROJECT_ROOT / 'sql' / 'reporting' / '001_eod_reconciliation_views.sql',
     PROJECT_ROOT / 'sql' / 'reporting' / '002_alert_views.sql',
+    PROJECT_ROOT / 'sql' / 'reporting' / '003_anomaly_scorecard.sql',
 ]
 
 PREPARE_SQL = [
+    "drop view if exists reporting.anomaly_scorecard;",
     "drop view if exists reporting.alert_summary;",
     "drop view if exists reporting.alert_feed;",
     "drop view if exists reporting.bookmaker_day_alerts;",

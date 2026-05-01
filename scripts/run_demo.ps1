@@ -119,6 +119,10 @@ Invoke-Checked "Export reporting CSVs" {
     & $Python -m src.reporting.export_reporting_views --output-dir $OutputDir
 }
 
+Invoke-Checked "Generate EOD integrity report" {
+    & $Python -m src.reporting.generate_eod_report --output-path (Join-Path $OutputDir "eod_integrity_report.md")
+}
+
 if (-not $SkipDbt) {
     Invoke-Checked "dbt debug" {
         & $Dbt debug --project-dir .\dbt_project --profiles-dir .\dbt_project\profiles

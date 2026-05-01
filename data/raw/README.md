@@ -33,7 +33,7 @@ If we try to force this directly into a clean transaction model too early, we ma
 
 ## Next Transformation Goal
 
-After landing the dump into the raw table, we will build a staging model that derives cleaner fields such as:
+After landing the dump into the raw table, the staging model derives cleaner fields such as:
 
 - `bet_id`
 - `client_reference`
@@ -43,3 +43,9 @@ After landing the dump into the raw table, we will build a staging model that de
 - `payout_amount`
 - `is_cancelled`
 - `is_paid`
+
+For public demos, the project can generate a synthetic workbook with the same header contract:
+
+```powershell
+python -m src.data_generation.create_demo_workbook
+```

@@ -26,6 +26,7 @@ The current version implements a complete local batch pipeline:
 - builds curated customer, event, bet, and payout views
 - runs reusable data quality checks for duplicate bet keys, negative stakes, missing event timestamps, cancelled bets with payouts, and payouts without stakes
 - produces daily reconciliation summaries and rule-based anomaly alerts
+- calculates an explainable source-day anomaly scorecard for risk prioritization
 - mirrors the SQL model flow in dbt with tests
 - exports reporting-ready CSV outputs
 
@@ -38,6 +39,7 @@ Excel workbooks
   -> core.customers / core.events / core.bets / core.payouts
   -> quality.bookmaker_bet_validation_issues
   -> reporting.daily_reconciliation_summary / reporting.alert_feed
+  -> reporting.anomaly_scorecard
   -> CSV outputs
 ```
 
@@ -73,6 +75,7 @@ Portfolio-safe examples are included in `data/sample_outputs/`:
 - `daily_reconciliation_summary_sample.csv`
 - `daily_issue_summary_sample.csv`
 - `alert_feed_sample.csv`
+- `anomaly_scorecard_sample.csv`
 
 Full generated outputs are written locally to `data/processed/`:
 
@@ -81,6 +84,8 @@ Full generated outputs are written locally to `data/processed/`:
 - `daily_bookmaker_summary.csv`
 - `alert_feed.csv`
 - `alert_summary.csv`
+- `anomaly_scorecard.csv`
+- `eod_integrity_report.md`
 
 `data/processed/` is ignored because those files are reproducible outputs.
 
@@ -108,11 +113,13 @@ Create `.env` from the example:
 Copy-Item .env.example .env
 ```
 
-If you do not have private source workbooks, generate a small synthetic workbook first:
+If you do not have private source workbooks, generate a synthetic demo workbook first:
 
 ```powershell
 python -m src.data_generation.create_demo_workbook
 ```
+
+The default demo workbook includes enough synthetic rows to trigger validation issues, source-day alerts, and anomaly scorecard risk bands.
 
 Start PostgreSQL with Docker:
 
@@ -142,6 +149,12 @@ Export reporting outputs:
 
 ```powershell
 python -m src.reporting.export_reporting_views
+```
+
+Generate the Markdown EOD report:
+
+```powershell
+python -m src.reporting.generate_eod_report
 ```
 
 ## dbt
@@ -174,6 +187,18 @@ Current rule-based checks include:
 - negative stake spike alert thresholds
 - loss-day payout ratio alert thresholds
 
+## Anomaly Scorecard
+
+The scorecard ranks each source file and reporting day from `0` to `100` using explainable components:
+
+- duplicate bet pressure
+- negative stake pressure
+- payout loss pressure
+- overall issue density
+- alert severity
+
+Each row receives a `risk_band`, `primary_driver`, and `recommended_action`, which turns validation results into a practical operations queue.
+
 ## Verification
 
 Run Python tests:
@@ -189,6 +214,8 @@ The GitHub Actions workflow also validates the project against a clean PostgreSQ
 - SQL pipeline application
 - demo workbook ingestion
 - reporting export generation
+- anomaly scorecard export
+- Markdown EOD integrity report generation
 - `dbt debug`
 - `dbt parse`
 - `dbt run`
@@ -198,6 +225,6 @@ The GitHub Actions workflow also validates the project against a clean PostgreSQ
 
 Version 1 is now a complete local data integrity pipeline. The next valuable extensions would be:
 
-- add a small anomaly scoring model after the rule-based alert layer
+- add a lightweight ML anomaly model alongside the explainable scorecard
 - add an orchestrator such as Prefect or Airflow
 - add cloud storage ingestion with S3

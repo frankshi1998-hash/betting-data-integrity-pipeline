@@ -75,6 +75,9 @@ jobs:
       - name: Export reporting outputs
         run: python -m src.reporting.export_reporting_views --output-dir ci_artifacts/processed
 
+      - name: Generate EOD integrity report
+        run: python -m src.reporting.generate_eod_report --output-path ci_artifacts/processed/eod_integrity_report.md
+
       - name: dbt debug
         run: dbt debug --project-dir ./dbt_project --profiles-dir ./dbt_project/profiles
 

@@ -20,6 +20,7 @@ class DemoWorkbookGeneratorTests(unittest.TestCase):
         rows = build_demo_rows()
         duplicate_keys = Counter((row["UUID"], row["Ticket No"]) for row in rows)
 
+        self.assertGreaterEqual(len(rows), 600)
         self.assertTrue(any(count > 1 for count in duplicate_keys.values()))
         self.assertTrue(any(row["Bet Amount Win"] == "($20.00)" for row in rows))
         self.assertTrue(any(row["Event Date"] is None for row in rows))
@@ -29,6 +30,25 @@ class DemoWorkbookGeneratorTests(unittest.TestCase):
         self.assertTrue(
             any(row["Bet Amount Win"] == "$0.00" and row["Win Payout Amount"] == "$50.00" for row in rows)
         )
+
+    def test_demo_rows_can_trigger_operational_alert_thresholds(self) -> None:
+        rows = build_demo_rows()
+        duplicate_extra_rows = sum(
+            count - 1
+            for count in Counter((row["UUID"], row["Ticket No"]) for row in rows).values()
+            if count > 1
+        )
+        negative_stake_rows = sum(1 for row in rows if row["Bet Amount Win"] in {"($10.00)", "($20.00)"})
+        total_positive_stake = sum(
+            120
+            for row in rows
+            if row["Bet Amount Win"] == "$120.00"
+        )
+
+        self.assertGreaterEqual(len(rows), 500)
+        self.assertGreaterEqual(duplicate_extra_rows, 100)
+        self.assertGreaterEqual(negative_stake_rows, 50)
+        self.assertGreaterEqual(total_positive_stake, 50_000)
 
 
 if __name__ == "__main__":

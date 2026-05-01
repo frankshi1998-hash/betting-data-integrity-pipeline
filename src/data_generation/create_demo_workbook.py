@@ -10,6 +10,7 @@ from src.ingest.load_bookmaker_dump import HEADER_TO_COLUMN
 
 HEADERS = list(HEADER_TO_COLUMN.keys())
 DEFAULT_OUTPUT_PATH = RAW_DATA_DIR / "demo_bookmaker_bet_dump.xlsx"
+DEFAULT_ROW_COUNT = 600
 
 
 def parse_args() -> argparse.Namespace:
@@ -21,6 +22,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_OUTPUT_PATH,
         help="Workbook path to write.",
+    )
+    parser.add_argument(
+        "--row-count",
+        type=int,
+        default=DEFAULT_ROW_COUNT,
+        help="Number of synthetic rows to create. Use at least 600 to trigger all demo alert thresholds.",
     )
     return parser.parse_args()
 
@@ -67,7 +74,7 @@ def make_row(**overrides: str | None) -> dict[str, str | None]:
     return row
 
 
-def build_demo_rows() -> list[dict[str, str | None]]:
+def build_edge_case_rows() -> list[dict[str, str | None]]:
     return [
         make_row(
             REFID="DEMO_0001",
@@ -131,6 +138,59 @@ def build_demo_rows() -> list[dict[str, str | None]]:
     ]
 
 
+def build_operational_rows(row_count: int = DEFAULT_ROW_COUNT) -> list[dict[str, str | None]]:
+    if row_count < 8:
+        raise ValueError("row_count must be at least 8")
+
+    rows = build_edge_case_rows()
+
+    for index in range(len(rows) + 1, row_count + 1):
+        duplicate_pair = index <= 248
+        duplicate_group = (index - 9) // 2 if duplicate_pair else index
+        is_negative_stake = 249 <= index <= 328
+        is_cancelled_with_payout = index in {329, 330, 331, 332, 333}
+        is_missing_event_timestamp = index in {334, 335, 336, 337, 338}
+        is_payout_without_stake = index in {339, 340, 341, 342, 343}
+
+        stake_amount = "($10.00)" if is_negative_stake else "$120.00"
+        payout_amount = "$160.00"
+        ticket_no = f"TKT-DUP-{duplicate_group:04d}" if duplicate_pair else f"TKT-{index:04d}"
+        source_uuid = f"demo-uuid-dup-{duplicate_group:04d}" if duplicate_pair else f"demo-uuid-{index:04d}"
+
+        overrides: dict[str, str | None] = {
+            "REFID": f"DEMO_{index:04d}",
+            "UUID": source_uuid,
+            "Ticket No": ticket_no,
+            "Bet Time": f"12:{index % 60:02d}:00",
+            "Runner Number": str((index % 12) + 1),
+            "Runner Name": f"Example Runner {(index % 12) + 1}",
+            "Bet Amount Win": stake_amount,
+            "Win Payout Amount": payout_amount,
+            "Paid Status": "Paid",
+        }
+
+        if is_cancelled_with_payout:
+            overrides["Cancelled Flag"] = "Y"
+            overrides["Time Cancelled"] = f"13:{index % 60:02d}:00"
+
+        if is_missing_event_timestamp:
+            overrides["Event Date"] = None
+            overrides["Event Time"] = None
+
+        if is_payout_without_stake:
+            overrides["Bet Amount Win"] = "$0.00"
+            overrides["Bet Amount Place"] = "$0.00"
+            overrides["Win Payout Amount"] = "$125.00"
+
+        rows.append(make_row(**overrides))
+
+    return rows
+
+
+def build_demo_rows(row_count: int = DEFAULT_ROW_COUNT) -> list[dict[str, str | None]]:
+    return build_operational_rows(row_count=row_count)
+
+
 def write_workbook(output_path: Path, rows: list[dict[str, str | None]]) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -147,7 +207,7 @@ def write_workbook(output_path: Path, rows: list[dict[str, str | None]]) -> None
 
 def main() -> None:
     args = parse_args()
-    rows = build_demo_rows()
+    rows = build_demo_rows(row_count=args.row_count)
     write_workbook(args.output_path, rows)
     print(f"Wrote {len(rows)} demo rows to {args.output_path}")
 

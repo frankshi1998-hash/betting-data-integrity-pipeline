@@ -11,7 +11,7 @@ And builds:
 - staging models for typed parsing
 - marts models for customers, events, bets, and payouts
 - quality models for validation issues
-- reporting models for EOD reconciliation and alerts
+- reporting models for EOD reconciliation, alerts, and anomaly scorecards
 
 Run commands:
 

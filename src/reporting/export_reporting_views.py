@@ -51,6 +51,14 @@ EXPORT_SPECS = [
         order by report_date, alert_scope, severity, alert_type
         """,
     ),
+    (
+        "anomaly_scorecard.csv",
+        """
+        select *
+        from reporting.anomaly_scorecard
+        order by report_date, anomaly_score desc, source_file
+        """,
+    ),
 ]
 
 
