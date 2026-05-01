@@ -31,6 +31,7 @@ The current version implements a complete local batch pipeline:
 - mirrors the SQL model flow in dbt with tests
 - exports reporting-ready CSV outputs
 - generates a static HTML dashboard for portfolio review and operational handoff
+- writes lineage artifacts that explain source-to-reporting data movement
 
 ## Architecture
 
@@ -44,6 +45,7 @@ Excel workbooks
   -> reporting.anomaly_scorecard
   -> ML anomaly scores
   -> HTML dashboard
+  -> lineage manifest / run summary
   -> CSV outputs
 ```
 
@@ -85,6 +87,8 @@ Portfolio-safe examples are included in `data/sample_outputs/`:
 - `ml_anomaly_scores_sample.csv`
 - `ml_anomaly_report_sample.md`
 - `integrity_dashboard_sample.html`
+- `data_lineage_manifest_sample.json`
+- `data_lineage_sample.md`
 
 Full generated outputs are written locally to `data/processed/`:
 
@@ -98,6 +102,8 @@ Full generated outputs are written locally to `data/processed/`:
 - `ml_anomaly_scores.csv`
 - `ml_anomaly_report.md`
 - `integrity_dashboard.html`
+- `data_lineage_manifest.json`
+- `data_lineage.md`
 - `pipeline_run_summary.json`
 
 `data/processed/` is ignored because those files are reproducible outputs.
@@ -110,7 +116,7 @@ For a quick end-to-end demo on Windows, run:
 powershell -ExecutionPolicy Bypass -File .\scripts\run_demo.ps1
 ```
 
-The demo script runs the Prefect-orchestrated pipeline. It generates a synthetic workbook, applies the SQL pipeline, loads the workbook, exports reporting CSVs, generates the Markdown reports, runs ML anomaly scoring, builds the static HTML dashboard, runs dbt checks, applies quality gates, and writes a run summary under `ci_artifacts/`, which is ignored by Git.
+The demo script runs the Prefect-orchestrated pipeline. It generates a synthetic workbook, applies the SQL pipeline, loads the workbook, exports reporting CSVs, generates the Markdown reports, runs ML anomaly scoring, builds the static HTML dashboard, writes lineage artifacts, runs dbt checks, applies quality gates, and writes a run summary under `ci_artifacts/`, which is ignored by Git.
 
 Create a virtual environment and install dependencies:
 
@@ -174,6 +180,12 @@ Generate the static dashboard from exported reporting files:
 
 ```powershell
 python -m src.reporting.generate_dashboard
+```
+
+Generate lineage artifacts from a completed reporting output folder:
+
+```powershell
+python -m src.reporting.generate_lineage --raw-dir data/raw --output-dir data/processed
 ```
 
 Run the orchestrated pipeline directly:
@@ -252,6 +264,17 @@ It summarizes:
 
 The dashboard is intentionally static so it works in GitHub Actions artifacts, portfolio demos, and local review without running a web server.
 
+## Lineage And Observability
+
+The pipeline writes two lineage artifacts:
+
+- `data_lineage_manifest.json`
+- `data_lineage.md`
+
+The JSON manifest inventories source files, generated artifacts, processing stages, code assets, and quality controls. The Markdown report includes a Mermaid lineage diagram plus stage-by-stage inputs, outputs, code owners, and validation controls.
+
+Together with `pipeline_run_summary.json`, these files make each run auditable without requiring Prefect Cloud, a metadata database, or private raw files.
+
 ## Orchestration
 
 The production-style workflow is implemented with Prefect in `src.orchestration.run_pipeline`.
@@ -265,8 +288,9 @@ The flow coordinates:
 - Markdown EOD report generation
 - ML anomaly scoring
 - static dashboard generation
+- lineage manifest and Markdown report generation
 - dbt debug, parse, run, and test
-- quality gates for loaded rows, dashboard/artifacts, anomaly rows, ML outliers, and demo alerts
+- quality gates for loaded rows, lineage/dashboard/artifacts, anomaly rows, ML outliers, and demo alerts
 - `pipeline_run_summary.json` output
 
 ## Verification
@@ -281,7 +305,7 @@ The GitHub Actions workflow also validates the project against a clean PostgreSQ
 
 - Python unit tests
 - the Prefect-orchestrated demo pipeline
-- quality gates for demo alerts, dashboard generation, critical anomaly scoring, and ML outlier scoring
+- quality gates for demo alerts, lineage/dashboard generation, critical anomaly scoring, and ML outlier scoring
 - dbt debug, parse, run, and test inside the orchestrated flow
 
 ## Project Status
@@ -289,4 +313,4 @@ The GitHub Actions workflow also validates the project against a clean PostgreSQ
 Version 1 is now a complete local data integrity pipeline. The next valuable extensions would be:
 
 - add cloud storage ingestion with S3
-- add stronger observability metadata such as run manifests and data lineage docs
+- add data contract enforcement for input workbook schemas

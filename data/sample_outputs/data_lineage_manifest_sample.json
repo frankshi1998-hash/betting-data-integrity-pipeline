@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-05-02T00:00:00",
+  "pipeline_name": "betting-data-integrity-pipeline",
+  "lineage_version": "1.0",
+  "raw_dir": "ci_artifacts/demo_raw",
+  "output_dir": "ci_artifacts/demo_processed",
+  "source_files": [
+    "demo_bookmaker_bet_dump.xlsx"
+  ],
+  "stages": [
+    {
+      "stage_id": "raw_ingestion",
+      "name": "Raw PostgreSQL ingestion",
+      "layer": "raw",
+      "description": "Workbook rows are loaded with source file, source row number, source UUID, and ingestion metadata.",
+      "inputs": [
+        "data/raw/*.xlsx"
+      ],
+      "outputs": [
+        "raw.bookmaker_bet_dump"
+      ],
+      "code_assets": [
+        "src.ingest.load_bookmaker_dump",
+        "sql/schema/001_raw_betting_transactions.sql"
+      ],
+      "quality_controls": [
+        "Header validation",
+        "Optional replace-files load mode",
+        "Source file row counts"
+      ]
+    },
+    {
+      "stage_id": "portfolio_artifacts",
+      "name": "Portfolio and operations artifacts",
+      "layer": "artifact",
+      "description": "Static HTML, Markdown, JSON, and CSV artifacts make the run reviewable without private data or a running service.",
+      "inputs": [
+        "data/processed/*.csv",
+        "ml_anomaly_scores.csv"
+      ],
+      "outputs": [
+        "integrity_dashboard.html",
+        "pipeline_run_summary.json",
+        "data_lineage_manifest.json",
+        "data_lineage.md"
+      ],
+      "code_assets": [
+        "src.reporting.generate_dashboard",
+        "src.reporting.generate_lineage",
+        "src.orchestration.run_pipeline"
+      ],
+      "quality_controls": [
+        "Prefect task ordering",
+        "Post-pipeline artifact quality gates",
+        "GitHub Actions artifact upload"
+      ]
+    }
+  ],
+  "artifact_inventory": [
+    {
+      "name": "integrity_dashboard.html",
+      "path": "ci_artifacts/demo_processed/integrity_dashboard.html",
+      "size_bytes": 10968
+    }
+  ],
+  "artifact_lineage": [
+    {
+      "artifact": "integrity_dashboard.html",
+      "path": "ci_artifacts/demo_processed/integrity_dashboard.html",
+      "size_bytes": 10968,
+      "purpose": "Static portfolio dashboard for browser-based review."
+    }
+  ]
+}

@@ -16,3 +16,5 @@ Included examples:
 - `ml_anomaly_scores_sample.csv`
 - `ml_anomaly_report_sample.md`
 - `integrity_dashboard_sample.html`
+- `data_lineage_manifest_sample.json`
+- `data_lineage_sample.md`

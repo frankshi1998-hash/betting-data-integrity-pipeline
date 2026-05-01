@@ -43,6 +43,8 @@ EXPECTED_ARTIFACTS = [
     "ml_anomaly_scores.csv",
     "ml_anomaly_report.md",
     "integrity_dashboard.html",
+    "data_lineage_manifest.json",
+    "data_lineage.md",
 ]
 ML_ARTIFACTS = [
     "ml_anomaly_scores.csv",
@@ -480,6 +482,21 @@ def generate_integrity_dashboard(output_dir: Path) -> None:
 
 
 @task
+def generate_data_lineage(raw_dir: Path, output_dir: Path, skip_ml: bool) -> None:
+    command = build_python_module_command(
+        "src.reporting.generate_lineage",
+        "--raw-dir",
+        str(raw_dir),
+        "--output-dir",
+        str(output_dir),
+    )
+    if skip_ml:
+        command.append("--skip-ml")
+
+    run_command(command)
+
+
+@task
 def run_dbt_commands(skip_dbt: bool) -> bool:
     commands = build_dbt_commands(skip_dbt)
     for command in commands:
@@ -542,6 +559,7 @@ def pipeline_flow(config: PipelineConfig) -> Path:
     generate_markdown_report(config.output_dir)
     ml_skipped = run_ml_anomaly_scoring(config.output_dir, config.skip_ml)
     generate_integrity_dashboard(config.output_dir)
+    generate_data_lineage(config.raw_dir, config.output_dir, config.skip_ml)
     dbt_skipped = run_dbt_commands(config.skip_dbt)
     source_files, artifacts, metrics, quality_gates = run_quality_gates(config)
     return write_pipeline_summary(
