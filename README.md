@@ -27,6 +27,7 @@ The current version implements a complete local batch pipeline:
 - runs reusable data quality checks for duplicate bet keys, negative stakes, missing event timestamps, cancelled bets with payouts, and payouts without stakes
 - produces daily reconciliation summaries and rule-based anomaly alerts
 - calculates an explainable source-day anomaly scorecard for risk prioritization
+- adds a lightweight ML anomaly model as a secondary triage signal
 - mirrors the SQL model flow in dbt with tests
 - exports reporting-ready CSV outputs
 
@@ -40,6 +41,7 @@ Excel workbooks
   -> quality.bookmaker_bet_validation_issues
   -> reporting.daily_reconciliation_summary / reporting.alert_feed
   -> reporting.anomaly_scorecard
+  -> ML anomaly scores
   -> CSV outputs
 ```
 
@@ -50,6 +52,7 @@ Excel workbooks
 - SQL
 - dbt
 - Prefect
+- scikit-learn
 - Docker
 - pytest / unittest
 - GitHub Actions
@@ -77,6 +80,8 @@ Portfolio-safe examples are included in `data/sample_outputs/`:
 - `daily_issue_summary_sample.csv`
 - `alert_feed_sample.csv`
 - `anomaly_scorecard_sample.csv`
+- `ml_anomaly_scores_sample.csv`
+- `ml_anomaly_report_sample.md`
 
 Full generated outputs are written locally to `data/processed/`:
 
@@ -87,6 +92,8 @@ Full generated outputs are written locally to `data/processed/`:
 - `alert_summary.csv`
 - `anomaly_scorecard.csv`
 - `eod_integrity_report.md`
+- `ml_anomaly_scores.csv`
+- `ml_anomaly_report.md`
 - `pipeline_run_summary.json`
 
 `data/processed/` is ignored because those files are reproducible outputs.
@@ -99,7 +106,7 @@ For a quick end-to-end demo on Windows, run:
 powershell -ExecutionPolicy Bypass -File .\scripts\run_demo.ps1
 ```
 
-The demo script runs the Prefect-orchestrated pipeline. It generates a synthetic workbook, applies the SQL pipeline, loads the workbook, exports reporting CSVs, generates the Markdown report, runs dbt checks, applies quality gates, and writes a run summary under `ci_artifacts/`, which is ignored by Git.
+The demo script runs the Prefect-orchestrated pipeline. It generates a synthetic workbook, applies the SQL pipeline, loads the workbook, exports reporting CSVs, generates the Markdown reports, runs ML anomaly scoring, runs dbt checks, applies quality gates, and writes a run summary under `ci_artifacts/`, which is ignored by Git.
 
 Create a virtual environment and install dependencies:
 
@@ -207,6 +214,19 @@ The scorecard ranks each source file and reporting day from `0` to `100` using e
 
 Each row receives a `risk_band`, `primary_driver`, and `recommended_action`, which turns validation results into a practical operations queue.
 
+## ML Anomaly Model
+
+The optional ML layer is implemented in `src.anomaly_detection.ml_anomaly_model`.
+
+It trains a local unsupervised Isolation Forest over source-day reconciliation features such as rule anomaly score, duplicate pressure, issue density, payout ratio, alert volume, and net revenue movement.
+
+The model writes:
+
+- `ml_anomaly_scores.csv`
+- `ml_anomaly_report.md`
+
+This is intentionally a secondary triage signal, not a replacement for explainable data quality checks. The CSV keeps the rule-based anomaly score beside the ML score so reviewers can compare deterministic business logic with model-driven outlier detection.
+
 ## Orchestration
 
 The production-style workflow is implemented with Prefect in `src.orchestration.run_pipeline`.
@@ -218,8 +238,9 @@ The flow coordinates:
 - SQL model application
 - reporting exports
 - Markdown EOD report generation
+- ML anomaly scoring
 - dbt debug, parse, run, and test
-- quality gates for loaded rows, artifacts, anomaly rows, and demo alerts
+- quality gates for loaded rows, artifacts, anomaly rows, ML outliers, and demo alerts
 - `pipeline_run_summary.json` output
 
 ## Verification
@@ -234,12 +255,12 @@ The GitHub Actions workflow also validates the project against a clean PostgreSQ
 
 - Python unit tests
 - the Prefect-orchestrated demo pipeline
-- quality gates for demo alerts and critical anomaly scoring
+- quality gates for demo alerts, critical anomaly scoring, and ML outlier scoring
 - dbt debug, parse, run, and test inside the orchestrated flow
 
 ## Project Status
 
 Version 1 is now a complete local data integrity pipeline. The next valuable extensions would be:
 
-- add a lightweight ML anomaly model alongside the explainable scorecard
 - add cloud storage ingestion with S3
+- add a lightweight dashboard over the reporting outputs

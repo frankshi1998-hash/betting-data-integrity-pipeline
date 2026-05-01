@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import shutil
@@ -39,6 +40,12 @@ EXPECTED_ARTIFACTS = [
     "alert_summary.csv",
     "anomaly_scorecard.csv",
     "eod_integrity_report.md",
+    "ml_anomaly_scores.csv",
+    "ml_anomaly_report.md",
+]
+ML_ARTIFACTS = [
+    "ml_anomaly_scores.csv",
+    "ml_anomaly_report.md",
 ]
 
 
@@ -53,6 +60,7 @@ class PipelineConfig:
     output_dir: Path
     replace_files: bool
     skip_dbt: bool
+    skip_ml: bool
     require_demo_alerts: bool
 
 
@@ -70,6 +78,9 @@ class PipelineMetrics:
     max_anomaly_score: float
     critical_anomaly_count: int
     alert_types: list[str]
+    ml_row_count: int
+    ml_outlier_count: int
+    max_ml_anomaly_score: float
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -104,6 +115,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Skip dbt debug, parse, run, and test for a faster local workflow.",
     )
     parser.add_argument(
+        "--skip-ml",
+        action="store_true",
+        help="Skip lightweight ML anomaly scoring.",
+    )
+    parser.add_argument(
         "--require-demo-alerts",
         action="store_true",
         help="Fail unless demo data produces expected alerts and a critical anomaly.",
@@ -118,6 +134,7 @@ def config_from_args(args: argparse.Namespace) -> PipelineConfig:
         output_dir=args.output_dir,
         replace_files=args.replace_files,
         skip_dbt=args.skip_dbt,
+        skip_ml=args.skip_ml,
         require_demo_alerts=args.require_demo_alerts,
     )
 
@@ -161,11 +178,17 @@ def list_source_files(raw_dir: Path) -> list[str]:
     return sorted(path.name for path in raw_dir.glob("*.xlsx"))
 
 
-def collect_artifact_summaries(output_dir: Path) -> list[ArtifactSummary]:
+def expected_artifacts(skip_ml: bool = False) -> list[str]:
+    if skip_ml:
+        return [artifact for artifact in EXPECTED_ARTIFACTS if artifact not in ML_ARTIFACTS]
+    return EXPECTED_ARTIFACTS.copy()
+
+
+def collect_artifact_summaries(output_dir: Path, skip_ml: bool = False) -> list[ArtifactSummary]:
     summaries: list[ArtifactSummary] = []
     missing_or_empty: list[str] = []
 
-    for filename in EXPECTED_ARTIFACTS:
+    for filename in expected_artifacts(skip_ml):
         path = output_dir / filename
         if not path.exists() or path.stat().st_size <= 0:
             missing_or_empty.append(filename)
@@ -187,7 +210,34 @@ def collect_artifact_summaries(output_dir: Path) -> list[ArtifactSummary]:
     return summaries
 
 
-def fetch_pipeline_metrics(source_files: list[str]) -> PipelineMetrics:
+def fetch_ml_artifact_metrics(output_dir: Path, source_files: list[str], skip_ml: bool) -> tuple[int, int, float]:
+    if skip_ml:
+        return 0, 0, 0.0
+
+    source_file_set = set(source_files)
+    scores_path = output_dir / "ml_anomaly_scores.csv"
+    if not scores_path.exists():
+        return 0, 0, 0.0
+
+    row_count = 0
+    outlier_count = 0
+    max_score = 0.0
+    with scores_path.open("r", newline="", encoding="utf-8") as csv_file:
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            if row.get("source_file") not in source_file_set:
+                continue
+
+            row_count += 1
+            score = float(row.get("ml_anomaly_score") or 0)
+            max_score = max(max_score, score)
+            if str(row.get("model_outlier_flag", "")).lower() == "true":
+                outlier_count += 1
+
+    return row_count, outlier_count, max_score
+
+
+def fetch_pipeline_metrics(source_files: list[str], output_dir: Path, skip_ml: bool) -> PipelineMetrics:
     if not source_files:
         return PipelineMetrics(
             source_row_counts={},
@@ -195,6 +245,9 @@ def fetch_pipeline_metrics(source_files: list[str]) -> PipelineMetrics:
             max_anomaly_score=0,
             critical_anomaly_count=0,
             alert_types=[],
+            ml_row_count=0,
+            ml_outlier_count=0,
+            max_ml_anomaly_score=0,
         )
 
     db_config = get_database_config()
@@ -241,12 +294,21 @@ def fetch_pipeline_metrics(source_files: list[str]) -> PipelineMetrics:
             )
             alert_types = [row[0] for row in cursor.fetchall()]
 
+    ml_row_count, ml_outlier_count, max_ml_anomaly_score = fetch_ml_artifact_metrics(
+        output_dir=output_dir,
+        source_files=source_files,
+        skip_ml=skip_ml,
+    )
+
     return PipelineMetrics(
         source_row_counts=row_counts,
         anomaly_row_count=int(anomaly_row_count),
         max_anomaly_score=float(max_anomaly_score or Decimal("0")),
         critical_anomaly_count=int(critical_anomaly_count),
         alert_types=alert_types,
+        ml_row_count=ml_row_count,
+        ml_outlier_count=ml_outlier_count,
+        max_ml_anomaly_score=max_ml_anomaly_score,
     )
 
 
@@ -255,6 +317,7 @@ def validate_quality_gates(
     artifacts: list[ArtifactSummary],
     metrics: PipelineMetrics,
     require_demo_alerts: bool,
+    skip_ml: bool = False,
 ) -> dict[str, Any]:
     errors: list[str] = []
 
@@ -265,11 +328,14 @@ def validate_quality_gates(
         if metrics.source_row_counts.get(source_file, 0) <= 0:
             errors.append(f"No raw rows loaded for {source_file}.")
 
-    if len(artifacts) != len(EXPECTED_ARTIFACTS):
+    if len(artifacts) != len(expected_artifacts(skip_ml)):
         errors.append("Not all expected reporting artifacts were generated.")
 
     if metrics.anomaly_row_count <= 0:
         errors.append("Anomaly scorecard did not produce any rows.")
+
+    if not skip_ml and metrics.ml_row_count <= 0:
+        errors.append("ML anomaly scorer did not produce any rows.")
 
     if require_demo_alerts:
         missing_alerts = sorted(EXPECTED_ALERT_TYPES.difference(metrics.alert_types))
@@ -279,6 +345,9 @@ def validate_quality_gates(
         if metrics.critical_anomaly_count <= 0:
             errors.append("Demo run did not produce a critical anomaly score.")
 
+        if not skip_ml and metrics.ml_outlier_count <= 0:
+            errors.append("Demo run did not produce an ML outlier.")
+
     if errors:
         raise QualityGateError(" ".join(errors))
 
@@ -287,6 +356,7 @@ def validate_quality_gates(
         "source_file_count": len(source_files),
         "artifact_count": len(artifacts),
         "require_demo_alerts": require_demo_alerts,
+        "ml_skipped": skip_ml,
     }
 
 
@@ -307,6 +377,7 @@ def build_run_summary(
     metrics: PipelineMetrics,
     quality_gates: dict[str, Any],
     dbt_skipped: bool,
+    ml_skipped: bool,
 ) -> dict[str, Any]:
     return {
         "run_id": str(uuid4()),
@@ -317,6 +388,7 @@ def build_run_summary(
             "output_dir": str(config.output_dir),
             "replace_files": config.replace_files,
             "skip_dbt": config.skip_dbt,
+            "skip_ml": config.skip_ml,
             "require_demo_alerts": config.require_demo_alerts,
         },
         "source_files": source_files,
@@ -324,6 +396,7 @@ def build_run_summary(
         "metrics": asdict(metrics),
         "quality_gates": quality_gates,
         "dbt": {"skipped": dbt_skipped},
+        "ml": {"skipped": ml_skipped},
     }
 
 
@@ -380,6 +453,21 @@ def generate_markdown_report(output_dir: Path) -> None:
 
 
 @task
+def run_ml_anomaly_scoring(output_dir: Path, skip_ml: bool) -> bool:
+    if skip_ml:
+        return True
+
+    run_command(
+        build_python_module_command(
+            "src.anomaly_detection.ml_anomaly_model",
+            "--output-dir",
+            str(output_dir),
+        )
+    )
+    return False
+
+
+@task
 def run_dbt_commands(skip_dbt: bool) -> bool:
     commands = build_dbt_commands(skip_dbt)
     for command in commands:
@@ -390,13 +478,14 @@ def run_dbt_commands(skip_dbt: bool) -> bool:
 @task
 def run_quality_gates(config: PipelineConfig) -> tuple[list[str], list[ArtifactSummary], PipelineMetrics, dict[str, Any]]:
     source_files = list_source_files(config.raw_dir)
-    artifacts = collect_artifact_summaries(config.output_dir)
-    metrics = fetch_pipeline_metrics(source_files)
+    artifacts = collect_artifact_summaries(config.output_dir, config.skip_ml)
+    metrics = fetch_pipeline_metrics(source_files, config.output_dir, config.skip_ml)
     quality_gate_result = validate_quality_gates(
         source_files=source_files,
         artifacts=artifacts,
         metrics=metrics,
         require_demo_alerts=config.require_demo_alerts,
+        skip_ml=config.skip_ml,
     )
     return source_files, artifacts, metrics, quality_gate_result
 
@@ -409,6 +498,7 @@ def write_pipeline_summary(
     metrics: PipelineMetrics,
     quality_gates: dict[str, Any],
     dbt_skipped: bool,
+    ml_skipped: bool,
 ) -> Path:
     summary = build_run_summary(
         config=config,
@@ -417,6 +507,7 @@ def write_pipeline_summary(
         metrics=metrics,
         quality_gates=quality_gates,
         dbt_skipped=dbt_skipped,
+        ml_skipped=ml_skipped,
     )
     output_path = config.output_dir / "pipeline_run_summary.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -437,6 +528,7 @@ def pipeline_flow(config: PipelineConfig) -> Path:
     load_workbook_data(config.raw_dir, config.replace_files)
     export_reporting_outputs(config.output_dir)
     generate_markdown_report(config.output_dir)
+    ml_skipped = run_ml_anomaly_scoring(config.output_dir, config.skip_ml)
     dbt_skipped = run_dbt_commands(config.skip_dbt)
     source_files, artifacts, metrics, quality_gates = run_quality_gates(config)
     return write_pipeline_summary(
@@ -446,6 +538,7 @@ def pipeline_flow(config: PipelineConfig) -> Path:
         metrics=metrics,
         quality_gates=quality_gates,
         dbt_skipped=dbt_skipped,
+        ml_skipped=ml_skipped,
     )
 
 

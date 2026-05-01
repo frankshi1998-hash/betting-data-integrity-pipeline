@@ -19,6 +19,8 @@ from src.orchestration.run_pipeline import (
     build_python_module_command,
     build_run_summary,
     collect_artifact_summaries,
+    expected_artifacts,
+    fetch_ml_artifact_metrics,
     parse_args,
     validate_quality_gates,
 )
@@ -32,6 +34,7 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(args.raw_dir, RAW_DATA_DIR)
         self.assertFalse(args.replace_files)
         self.assertFalse(args.skip_dbt)
+        self.assertFalse(args.skip_ml)
         self.assertFalse(args.require_demo_alerts)
 
     def test_build_python_module_command_uses_current_interpreter(self) -> None:
@@ -61,6 +64,41 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(len(summaries), len(EXPECTED_ARTIFACTS))
         self.assertTrue(all(summary.size_bytes > 0 for summary in summaries))
 
+    def test_collect_artifact_summaries_can_skip_ml_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            for filename in expected_artifacts(skip_ml=True):
+                (output_dir / filename).write_text("x", encoding="utf-8")
+
+            summaries = collect_artifact_summaries(output_dir, skip_ml=True)
+
+        self.assertEqual(len(summaries), len(expected_artifacts(skip_ml=True)))
+
+    def test_fetch_ml_artifact_metrics_reads_score_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            (output_dir / "ml_anomaly_scores.csv").write_text(
+                "\n".join(
+                    [
+                        "source_file,ml_anomaly_score,model_outlier_flag",
+                        "demo_bookmaker_bet_dump.xlsx,91.5,True",
+                        "other.xlsx,20.0,False",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            row_count, outlier_count, max_score = fetch_ml_artifact_metrics(
+                output_dir,
+                ["demo_bookmaker_bet_dump.xlsx"],
+                skip_ml=False,
+            )
+
+        self.assertEqual(row_count, 1)
+        self.assertEqual(outlier_count, 1)
+        self.assertEqual(max_score, 91.5)
+
     def test_quality_gates_pass_for_expected_demo_metrics(self) -> None:
         source_files = ["demo_bookmaker_bet_dump.xlsx"]
         artifacts = [
@@ -73,6 +111,9 @@ class OrchestrationTests(unittest.TestCase):
             max_anomaly_score=95.25,
             critical_anomaly_count=1,
             alert_types=sorted(EXPECTED_ALERT_TYPES),
+            ml_row_count=1,
+            ml_outlier_count=1,
+            max_ml_anomaly_score=100.0,
         )
 
         result = validate_quality_gates(
@@ -80,6 +121,7 @@ class OrchestrationTests(unittest.TestCase):
             artifacts=artifacts,
             metrics=metrics,
             require_demo_alerts=True,
+            skip_ml=False,
         )
 
         self.assertTrue(result["passed"])
@@ -97,6 +139,9 @@ class OrchestrationTests(unittest.TestCase):
             max_anomaly_score=70.0,
             critical_anomaly_count=0,
             alert_types=["duplicate_ratio_spike"],
+            ml_row_count=1,
+            ml_outlier_count=0,
+            max_ml_anomaly_score=80.0,
         )
 
         with self.assertRaises(QualityGateError):
@@ -105,6 +150,7 @@ class OrchestrationTests(unittest.TestCase):
                 artifacts=artifacts,
                 metrics=metrics,
                 require_demo_alerts=True,
+                skip_ml=False,
             )
 
     def test_build_run_summary_shape(self) -> None:
@@ -114,6 +160,7 @@ class OrchestrationTests(unittest.TestCase):
             output_dir=Path("out"),
             replace_files=True,
             skip_dbt=True,
+            skip_ml=False,
             require_demo_alerts=True,
         )
         artifacts = [ArtifactSummary(name="x.csv", path="out/x.csv", size_bytes=10)]
@@ -123,6 +170,9 @@ class OrchestrationTests(unittest.TestCase):
             max_anomaly_score=95.25,
             critical_anomaly_count=1,
             alert_types=["duplicate_ratio_spike"],
+            ml_row_count=1,
+            ml_outlier_count=1,
+            max_ml_anomaly_score=100.0,
         )
 
         summary = build_run_summary(
@@ -132,6 +182,7 @@ class OrchestrationTests(unittest.TestCase):
             metrics=metrics,
             quality_gates={"passed": True},
             dbt_skipped=True,
+            ml_skipped=False,
         )
 
         self.assertIn("run_id", summary)
@@ -140,6 +191,7 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(summary["artifacts"][0]["name"], "x.csv")
         self.assertTrue(summary["quality_gates"]["passed"])
         self.assertTrue(summary["dbt"]["skipped"])
+        self.assertFalse(summary["ml"]["skipped"])
 
 
 if __name__ == "__main__":

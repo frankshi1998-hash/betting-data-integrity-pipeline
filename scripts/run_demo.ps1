@@ -2,7 +2,8 @@ param(
     [string]$DemoRawDir,
     [string]$OutputDir,
     [switch]$SkipDocker,
-    [switch]$SkipDbt
+    [switch]$SkipDbt,
+    [switch]$SkipMl
 )
 
 $ErrorActionPreference = "Stop"
@@ -106,6 +107,10 @@ $pipelineArgs = @(
 
 if ($SkipDbt) {
     $pipelineArgs += "--skip-dbt"
+}
+
+if ($SkipMl) {
+    $pipelineArgs += "--skip-ml"
 }
 
 Invoke-Checked "Run orchestrated demo pipeline" {
